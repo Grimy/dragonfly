@@ -1,0 +1,31 @@
+dragonfly.txt                               Drag visual selections around
+
+Version: 0.1
+Author : Grimy <victor.adam@derpymail.org>
+License: Released in the public domain
+
+CONTENTS					*dragonfly-contents*
+
+Introduction		|dragonfly-introduction|
+Usage			|dragonfly-usage|
+Install                 |dragonfly-install|
+
+==============================================================================
+INTRODUCTION					*dragonfly-introduction*
+
+TODO
+
+==============================================================================
+USAGE						*dragonfly-usage*
+
+TODO
+
+==============================================================================
+INSTALL						*dragonfly-install*
+
+Install the distributed files into your Vim script directory which is usually
+~/.vim/, or $HOME/vimfiles on Windows.  You should consider using one of the
+famous package managers for Vim like vundle or neobundle to install the
+plugin.
+
+==============================================================================

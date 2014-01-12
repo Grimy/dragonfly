@@ -29,7 +29,8 @@ function! dragonfly#move(v, h, ...) range
 		else
 			let eof = line("'>") == line('$')
 			execute 'normal!' a:v == +1 ? eof ? 'yOgvdp' : 'dp'
-						\     a:v == -1 : eof ? 'dP'       : 'dkP'
+						\   : a:v == -1 ? eof ? 'dP'       : 'dkP'
+						\   : ''
 		endif
 		execute 'normal! V'. height . '_=gv'
 
@@ -92,29 +93,51 @@ function! dragonfly#insert(append) range
 		return
 	endif
 
+	let chars = sort([virtcol("'>"), virtcol("'<")])[a:append] . '|'
+	execute '*normal ' . chars . "\<C-N>"
+	call g:dragonfly_sublime()
+endfunction
+
+
+let g:nbcursors = 0
+
+function! NormalPos(pos)
+	return line(a:pos) . 'G' . virtcol(a:pos) . '|'
+endfunction
+
+nnoremap <C-N> :let g:nbcursors += 1<CR>i<Char-0x2503><Esc>l
+nnoremap <C-Z> :call g:dragonfly_sublime()<CR>
+vnoremap <Space> :s/\s*$//<CR>gv
+
+function! g:dragonfly_sublime()
+	if g:nbcursors == 0
+		return
+	endif
+
 	" Save options so we can restore them later
-	let save = [ &eventignore, &virtualedit, &cursorline, &cursorcolumn ]
-	set eventignore=all virtualedit=all nocursorline nocursorcolumn
-	match Cursor /┃/
+	let save = [ &eventignore, &cursorline, &cursorcolumn ]
+	set eventignore=all nocursorline nocursorcolumn
+	match cursor /\%u2503/
 
-	let chars = sort([virtcol("'>"), virtcol("'<")])[a:append] . '|i'
-	let tick = b:changedtick
-
-	while chars !~ "\<Esc>$"
-		execute '*normal ' . chars . '┃l'
+	let char = ''
+	while char != "\<Esc>"
 		redraw
-		let char = getchar()
-		let chars .= char > 0 ? nr2char(char) : char
-		if b:changedtick > tick
-			let tick = b:changedtick
-			undo
-		endif
+		let charcode = getchar()
+		let char = charcode > 0 ? nr2char(charcode) : charcode
+		for i in range(g:nbcursors)
+			silent! undojoin
+			execute "normal! l/\\%u2503\<CR>x"
+			execute 'normal i' . char
+			execute "normal! a\<Char-0x2503>"
+		endfor
 	endwhile
 
-	execute '*normal ' . chars
-
+	%s/\%u2503//g
 	match
-	let [ &eventignore, &virtualedit, &cursorline, &cursorcolumn ] = save
-	call repeat#set(chars, 1)
+	let g:nbcursors = 0
+	let [ &eventignore, &cursorline, &cursorcolumn ] = save
+	"call repeat#set(chars, 1)
 endfunction
+
+
 
