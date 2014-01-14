@@ -1,143 +1,112 @@
+" dragonfly.vim
+" Last change: Tue 14 Jan 2014 05:27:34 AM CET
+" Author: Grimy <Victor.Adam@derpymail.org>
+" License: This file is released in the public domain
 
-let s:last_moved_text = ''
-function! dragonfly#move(v, h, ...) range
-	" Reselect the visual selection
-	normal! gv
+let s:mincol  = 0
+let s:maxcol  = 0
+let s:minline = 0
+let s:maxline = 0
 
-	" We can’t move before the start of the buffer
-	" Dragging doesn’t make sense in character-wise mode
-	if line("'<") + a:v == 0 || mode() ==# 'v'
-		return
-	endif
-
+function! dragonfly#init(v, h)
 	" Save registers and options so we can restore them later
 	set virtualedit+=block
-	let save = [ @", &virtualedit ]
+	let s:save = [ @", &clipboard, &virtualedit, &report ]
+	set report=2000000000
+	set clipboard=
 
-	" Merge consecutive movements
-	normal ygv
-	if s:last_moved_text == @" && !a:0
+	" Reselect the visual selection
+	normal! gvygv
+
+	" Merge consecutive movements in the undo history
+	if [ line("'<"), line("'>") ] == [  s:minline, s:maxline ]
+				\ && ([ virtcol("'<"), virtcol("'>") ] == [ s:mincol, s:maxcol ]
+				\ || mode() ==# 'V')
 		silent! undojoin
 	endif
 
-	" All actual work is done here
+	" Paste the selection on top of itself
+	" Quick but perfect trick to deal with selections using $
+	normal! pgv
 
-	if mode() ==# 'V' " linewise
-		let height = line("'>") - line("'<") + 1
-		if a:0
-			execute "normal! y'>p"
-		else
-			let eof = line("'>") == line('$')
-			execute 'normal!' a:v == +1 ? eof ? 'yOgvdp' : 'dp'
-						\   : a:v == -1 ? eof ? 'dP'       : 'dkP'
-						\   : ''
-		endif
-		execute 'normal! V'. height . '_=gv'
-
-	else              " blockwise
-		let [ mincol, maxcol ] = dragonfly#get_selection_corners()
-		set virtualedit=all
-		if a:0
-			execute 'normal! y' . line("'<") . 'G' . (maxcol - 1) . '|pgv'
-		elseif mincol + a:h > 0
-			execute 'normal! ' . mincol . '|O' . maxcol . '|d'
-
-			let start = (line("'<") + a:v) . 'G' . (mincol + a:h) . '|'
-			let end   = (line("'>") + a:v) . 'G' . (maxcol + a:h) . '|'
-
-			" Strip trailing whitespace
-			*s/\s*$//
-			*normal! ==
-
-			execute 'normal! ' . start . 'P' . start . "\<C-V>" . end
-		endif
+	" Fixes off-by-one errors due to inclusive selections
+	if &selection =~ 'exclusive'
+		normal! lygv
 	endif
 
-	" Restore registers and options
-	let s:last_moved_text = @"
-	let [ @", &virtualedit ] = save
-endfunction
+	let s:indent = mode() ==# 'V' && a:v
+	let s:minline =   line("'<") + a:v
+	let s:maxline =   line("'>") + a:v
+	let s:mincol = virtcol("'<") + a:h
+	let s:maxcol = virtcol("'>") + a:h
 
-
-function! dragonfly#get_selection_corners()
-	let mincol = min([virtcol("'<"), virtcol("'>")])
-	let maxcol = max([virtcol("'<"), virtcol("'>")])
-	let line   = line('.')
-
-	" Handle the special case of a blockwise selection with $
-	set virtualedit=
-	for i in range(line("'<"), line("'>"))
-		execute 'normal! ' . i . 'G'
-		if virtcol('.') > maxcol
-			let maxcol = virtcol('.') - (&selection =~ 'inclusive')
-		endif
-	endfor
-	execute 'normal! ' . line . 'G'
-
-	" Fix the off-by-one error due to exclusive selections
-	if &selection =~ 'exclusive' && line("'>") != line("'<")
-		let maxcol += xor(virtcol('.') <= mincol, line == line("'<"))
+	if s:mincol <= 0
+		let s:maxcol += 1 - s:mincol
+		let s:mincol = 1
 	endif
-
-	return [ mincol, maxcol ]
-endfunction
-
-
-" Optional parameter : append
-function! dragonfly#insert(append) range
-
-	" In character-wise mode, fallback to the normal behaviour
-	if visualmode() ==# 'v'
-		call setpos('.', getpos(a:append ? "'>" : "'<"))
-		startinsert
-		return
+	if s:minline <= 0
+		let s:maxline += 1 - s:minline
+		let s:minline = 1
 	endif
-
-	let chars = sort([virtcol("'>"), virtcol("'<")])[a:append] . '|'
-	execute '*normal ' . chars . "\<C-N>"
-	call g:dragonfly_sublime()
-endfunction
-
-
-let g:nbcursors = 0
-
-function! NormalPos(pos)
-	return line(a:pos) . 'G' . virtcol(a:pos) . '|'
-endfunction
-
-nnoremap <C-N> :let g:nbcursors += 1<CR>i<Char-0x2503><Esc>l
-nnoremap <C-Z> :call g:dragonfly_sublime()<CR>
-vnoremap <Space> :s/\s*$//<CR>gv
-
-function! g:dragonfly_sublime()
-	if g:nbcursors == 0
-		return
-	endif
-
-	" Save options so we can restore them later
-	let save = [ &eventignore, &cursorline, &cursorcolumn ]
-	set eventignore=all nocursorline nocursorcolumn
-	match cursor /\%u2503/
-
-	let char = ''
-	while char != "\<Esc>"
-		redraw
-		let charcode = getchar()
-		let char = charcode > 0 ? nr2char(charcode) : charcode
-		for i in range(g:nbcursors)
-			silent! undojoin
-			execute "normal! l/\\%u2503\<CR>x"
-			execute 'normal i' . char
-			execute "normal! a\<Char-0x2503>"
-		endfor
+	while s:maxline >= line('$')
+		call append('$', '')
 	endwhile
 
-	%s/\%u2503//g
-	match
-	let g:nbcursors = 0
-	let [ &eventignore, &cursorline, &cursorcolumn ] = save
-	"call repeat#set(chars, 1)
+endfunction
+
+" Restore registers and options
+function! dragonfly#after()
+	let reselect =  s:minline . 'G' . s:mincol . '|' . getregtype()[0]
+				\ . s:maxline . 'G' . s:maxcol . '|'
+
+	if s:indent
+		let reselect .= '=gv'
+	endif
+
+	execute 'normal!' reselect
+	*call dragonfly#fix_spaces()
+	execute 'normal! y' . reselect
+	let [ @", &clipboard, &virtualedit, &report ] = s:save
 endfunction
 
 
+function! dragonfly#move(v, h) range
+	call dragonfly#init(a:v, mode() ==# 'V' ? 0 : a:h)
+
+	if mode() ==# 'v'
+		" Dragging doesn’t make sense in character-wise mode
+	elseif mode() ==# 'V' && a:h
+		execute 'normal! ' a:h > 0 ? a:h . '>' : -a:h . '<'
+	else
+		set virtualedit=all
+
+		normal! d
+		call setreg('"', substitute(@", "\t", repeat(' ', &tabstop), 'g'),
+					\ getregtype())
+
+		*call dragonfly#fix_spaces()
+		execute 'normal! ' . s:minline . 'G' . s:mincol . '|P'
+	endif
+
+	call dragonfly#after()
+endfunction
+
+function! dragonfly#fix_spaces()
+	let indent  = repeat("\t", indent('.') / &tabstop)
+	let indent .= repeat(' ',  indent('.') % &tabstop)
+	let line = getline('.')
+	let line = substitute(line, '^\s*', indent, '')
+	let line = substitute(line, '\s*$', '', '')
+	if (line !=# getline('.'))
+		call setline('.', line)
+	endif
+endfunction
+
+function! dragonfly#copy(times) range
+	normal! gvyv
+	call dragonfly#init(getregtype() ==# 'V' ? line("'>") - line("'<") + 1 : 0,
+				\ str2nr(getregtype()[1:]))
+	execute 'normal! y' . s:minline . 'G' . s:mincol . '|' . a:times . 'P'
+	call dragonfly#after()
+endfunction
 
