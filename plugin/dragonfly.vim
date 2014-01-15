@@ -9,6 +9,3 @@ vnoremap <silent> <Plug>(dragonfly_up)    :call dragonfly#move(-v:count1, 0)<CR>
 vnoremap <silent> <Plug>(dragonfly_down)  :call dragonfly#move(+v:count1, 0)<CR>
 vnoremap <silent> <Plug>(dragonfly_copy)  :call dragonfly#copy(v:count1)<CR>
 
-command! -range=% DragonflyInsert call dragonfly#insert(0)
-command! -range=% DragonflyAppend call dragonfly#insert(1)
-
