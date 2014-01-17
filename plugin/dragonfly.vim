@@ -1,7 +1,7 @@
-" Vim global plugin for dragging virtual blocks
-" Last change: 2014-01-12
-" Maintainer: Victor Adam (victor.adam@derpymail.org)
-" This software is released in the public domain
+" Copyright © 2014 Grimy <Victor.Adam@derpymail.org>
+" This work is free software. You can redistribute it and/or modify it under
+" the terms of the Do What The Fuck You Want To Public License, Version 2, as
+" published by Sam Hocevar. See the LICENCE file for more details.
 
 vnoremap <silent> <Plug>(dragonfly_left)  :call dragonfly#move(0, -v:count1)<CR>
 vnoremap <silent> <Plug>(dragonfly_right) :call dragonfly#move(0, +v:count1)<CR>
