@@ -1,7 +1,13 @@
 " dragonfly.vim
-" Last change: Tue 14 Jan 2014 05:27:34 AM CET
+" Last change: Fri 17 Jan 2014 01:20:37 AM CET
 " Author: Grimy <Victor.Adam@derpymail.org>
 " License: This file is released in the public domain
+" TODO: tabs disappear when moving a block left
+" TODO: refactor, privatize
+" TODO: use a specific register?
+" TODO: better way to silence report?
+" TODO: better way to move to a virtcol?
+" TODO: handle the mouse
 
 let s:mincol  = 0
 let s:maxcol  = 0
@@ -10,36 +16,42 @@ let s:maxline = 0
 
 function! dragonfly#init(v, h)
 	" Save registers and options so we can restore them later
-	set virtualedit+=block
 	let s:save = [ @", &clipboard, &virtualedit, &report ]
-	set report=2000000000
 	set clipboard=
+	set virtualedit=all
+	set report=2147483647 " Completely disable reports
 
 	" Reselect the visual selection
 	normal! gvygv
 
 	" Merge consecutive movements in the undo history
 	if [ line("'<"), line("'>") ] == [  s:minline, s:maxline ]
-				\ && ([ virtcol("'<"), virtcol("'>") ] == [ s:mincol, s:maxcol ]
-				\ || mode() ==# 'V')
+                \ && ([ virtcol("'<"), virtcol("'>") ] == [ s:mincol, s:maxcol ]
+                \ || mode() ==# 'V')
 		silent! undojoin
 	endif
 
-	" Paste the selection on top of itself
-	" Quick but perfect trick to deal with selections using $
-	normal! pgv
-
-	" Fixes off-by-one errors due to inclusive selections
-	if &selection =~ 'exclusive'
-		normal! lygv
-	endif
-
 	let s:indent = mode() ==# 'V' && a:v
-	let s:minline =   line("'<") + a:v
-	let s:maxline =   line("'>") + a:v
-	let s:mincol = virtcol("'<") + a:h
-	let s:maxcol = virtcol("'>") + a:h
 
+	" Expand tabs, but only in the selected block
+	call setreg('"', substitute(@", "\t", repeat(' ', &tabstop), 'g'),
+	        	\ getregtype())
+
+	let s:minline = line("'<")
+	let s:maxline = line("'>")
+	let s:mincol  = min([virtcol("'<"), virtcol("'>")])
+	let s:maxcol  = s:mincol + stridx(@" . "\n", "\n")
+				\ - (&selection !~ 'exclusive')
+	" Fixes off-by-one errors due to inclusive selections
+
+	normal! p
+
+	call s:reselect()
+
+	let s:minline += a:v
+	let s:maxline += a:v
+	let s:mincol  += a:h
+	let s:maxcol  += a:h
 	if s:mincol <= 0
 		let s:maxcol += 1 - s:mincol
 		let s:mincol = 1
@@ -49,24 +61,46 @@ function! dragonfly#init(v, h)
 		let s:minline = 1
 	endif
 	while s:maxline >= line('$')
-		call append('$', '')
+	    call append('$', '')
 	endwhile
 
 endfunction
 
 " Restore registers and options
 function! dragonfly#after()
-	let reselect =  s:minline . 'G' . s:mincol . '|' . getregtype()[0]
-				\ . s:maxline . 'G' . s:maxcol . '|'
-
+	call dragonfly#fix_spaces(range(s:minline, s:maxline))
+	call s:reselect()
 	if s:indent
-		let reselect .= '=gv'
+		normal! =gv
 	endif
-
-	execute 'normal!' reselect
-	*call dragonfly#fix_spaces()
-	execute 'normal! y' . reselect
 	let [ @", &clipboard, &virtualedit, &report ] = s:save
+endfunction
+
+
+function! s:reselect()
+    execute 'normal!' . s:minline . 'G' . s:mincol . '|' . getregtype()[0]
+                \     . s:maxline . 'G' . s:maxcol . '|'
+endfunction
+
+
+function! dragonfly#fix_spaces(lines)
+	for lnum in a:lines
+		" echo lnum
+		if &expandtab
+			let indent  = repeat(' ',  indent(lnum))
+		else
+			let indent  = repeat("\t", indent(lnum) / &tabstop)
+			let indent .= repeat(' ',  indent(lnum) % &tabstop)
+		endif
+		" echo indent(lnum)
+		" echo strlen(indent)
+		let line = getline(lnum)
+		let line = substitute(line, '^\s*', indent, '')
+		let line = substitute(line, '\s*$', '', '')
+		if (line !=# getline(lnum))
+			call setline(lnum, line)
+		endif
+	endfor
 endfunction
 
 
@@ -78,28 +112,13 @@ function! dragonfly#move(v, h) range
 	elseif mode() ==# 'V' && a:h
 		execute 'normal! ' a:h > 0 ? a:h . '>' : -a:h . '<'
 	else
-		set virtualedit=all
-
 		normal! d
-		call setreg('"', substitute(@", "\t", repeat(' ', &tabstop), 'g'),
-					\ getregtype())
-
-		*call dragonfly#fix_spaces()
-		execute 'normal! ' . s:minline . 'G' . s:mincol . '|P'
+		call dragonfly#fix_spaces(range(line("'<"), line("'>")))
+		execute 'normal! ' . s:minline . 'G' . s:mincol . '|'
+		normal! P
 	endif
 
 	call dragonfly#after()
-endfunction
-
-function! dragonfly#fix_spaces()
-	let indent  = repeat("\t", indent('.') / &tabstop)
-	let indent .= repeat(' ',  indent('.') % &tabstop)
-	let line = getline('.')
-	let line = substitute(line, '^\s*', indent, '')
-	let line = substitute(line, '\s*$', '', '')
-	if (line !=# getline('.'))
-		call setline('.', line)
-	endif
 endfunction
 
 function! dragonfly#copy(times) range
