@@ -35,8 +35,7 @@ function! dragonfly#init(v, h)
 	let s:indent = mode() ==# 'V' && a:v
 
 	" Expand tabs, but only in the selected block
-	call setreg('"', substitute(@", "\t", repeat(' ', &tabstop), 'g'),
-	        	\ getregtype())
+	call setreg('"', substitute(@", "\t", repeat(' ', &tabstop), 'g'), getregtype())
 
 	let s:minline = line("'<")
 	let s:maxline = line("'>")
@@ -46,7 +45,6 @@ function! dragonfly#init(v, h)
 	" Fixes off-by-one errors due to inclusive selections
 
 	normal! p
-
 	call s:reselect()
 
 	let s:minline += a:v
@@ -64,7 +62,6 @@ function! dragonfly#init(v, h)
 	while s:maxline >= line('$')
 	    call append('$', '')
 	endwhile
-
 endfunction
 
 " Restore registers and options
@@ -77,24 +74,19 @@ function! dragonfly#after()
 	let [ @", &clipboard, &virtualedit, &report ] = s:save
 endfunction
 
-
 function! s:reselect()
-    execute 'normal!' . s:minline . 'G' . s:mincol . '|' . getregtype()[0]
-                \     . s:maxline . 'G' . s:maxcol . '|'
+	execute 'normal!' . s:minline . 'G' . s:mincol . '|' . getregtype()[0]
+				\     . s:maxline . 'G' . s:maxcol . '|'
 endfunction
-
 
 function! dragonfly#fix_spaces(lines)
 	for lnum in a:lines
-		" echo lnum
 		if &expandtab
 			let indent  = repeat(' ',  indent(lnum))
 		else
 			let indent  = repeat("\t", indent(lnum) / &tabstop)
 			let indent .= repeat(' ',  indent(lnum) % &tabstop)
 		endif
-		" echo indent(lnum)
-		" echo strlen(indent)
 		let line = getline(lnum)
 		let line = substitute(line, '^\s*', indent, '')
 		let line = substitute(line, '\s*$', '', '')
@@ -104,15 +96,12 @@ function! dragonfly#fix_spaces(lines)
 	endfor
 endfunction
 
-
 function! dragonfly#move(v, h) range
 	call dragonfly#init(a:v, mode() ==# 'V' ? 0 : a:h)
 
-	if mode() ==# 'v'
-		" Dragging doesn’t make sense in character-wise mode
-	elseif mode() ==# 'V' && a:h
+	if mode() ==# 'V' && a:h
 		execute 'normal! ' a:h > 0 ? a:h . '>' : -a:h . '<'
-	else
+	elseif mode() !=# 'v'
 		normal! d
 		call dragonfly#fix_spaces(range(line("'<"), line("'>")))
 		execute 'normal! ' . s:minline . 'G' . s:mincol . '|'
