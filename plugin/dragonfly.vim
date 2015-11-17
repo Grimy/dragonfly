@@ -8,4 +8,3 @@ vnoremap <silent> <Plug>(dragonfly_right) :call dragonfly#move(0, +v:count1)<CR>
 vnoremap <silent> <Plug>(dragonfly_up)    :call dragonfly#move(-v:count1, 0)<CR>
 vnoremap <silent> <Plug>(dragonfly_down)  :call dragonfly#move(+v:count1, 0)<CR>
 vnoremap <silent> <Plug>(dragonfly_copy)  :call dragonfly#copy(v:count1)<CR>
-
